@@ -1,0 +1,9 @@
+alias openai-codex='docker run --rm -it \
+  -v "$(pwd)":$(pwd):rw \
+  -w "$(pwd)" \
+  -e OPENAI_API_KEY="$(cat ~/.openai)" \
+  --user "$(id -u):$(id -g)" \
+  -e USER="$USER" \
+  -e HOME="/workspace" \
+  -v "${HOME}/.codex:/workspace/.codex"
+  openai-codex codex "$@"'
