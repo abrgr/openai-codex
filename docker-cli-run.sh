@@ -81,10 +81,16 @@ docker_cli_run() {
   # Standard volume mounts
   local -a volume_args=(
     -v "${mount_path}":"${mount_path}":rw
-    -v "${HOME}/.gitconfig:${HOME}/.gitconfig:ro"
-    -v "${HOME}/.ssh:${HOME}/.ssh:ro"
-    -v "/var/run/docker.sock:/var/run/docker.sock"
   )
+  if [[ -f "${HOME}/.gitconfig" ]]; then
+    volume_args+=(-v "${HOME}/.gitconfig:${HOME}/.gitconfig:ro")
+  fi
+  if [[ -d "${HOME}/.ssh" ]]; then
+    volume_args+=(-v "${HOME}/.ssh:${HOME}/.ssh:ro")
+  fi
+  if [[ -S "/var/run/docker.sock" ]]; then
+    volume_args+=(-v "/var/run/docker.sock:/var/run/docker.sock")
+  fi
 
   # Git credentials (optional)
   if [[ -f "${HOME}/.git-credentials" ]]; then
@@ -107,11 +113,19 @@ docker_cli_run() {
     env_args+=(-e "$env")
   done
 
+  # Add docker group if the socket is mounted
+  local -a group_args=()
+  local docker_gid
+  docker_gid=$(getent group docker 2>/dev/null | cut -d: -f3)
+  if [[ -n "$docker_gid" && -S "/var/run/docker.sock" ]]; then
+    group_args=(--group-add "$docker_gid")
+  fi
+
   docker run --rm -it \
     "${volume_args[@]}" \
     -w "${work_dir}" \
     "${env_args[@]}" \
-    --group-add "$(getent group docker | cut -d: -f3)" \
-    --user "${UID}:${UID}" \
+    "${group_args[@]}" \
+    --user "${UID}:$(id -g)" \
     "$image" "${cmd[@]}" "${pass_args[@]}"
 }
