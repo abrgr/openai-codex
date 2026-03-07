@@ -9,8 +9,12 @@ RUN apt-get update -qq && \
 # Install Codex CLI globally — always pulls latest published version
 RUN npm install -g @openai/codex && npm cache clean --force
 
-RUN groupadd -g 1001 user && \
-    useradd -m -u 1001 -g 1001 -s /bin/bash user
+RUN usermod -u 1001 gitpod \
+  && groupmod -g 1001 gitpod \
+  && chown -R 1001:1001 /home/gitpod
 
-# Default to interactive shell so the alias can pass commands/args
+RUN chown -R 1001:1001 /workspace
+
+USER gitpod
+
 CMD ["bash"]

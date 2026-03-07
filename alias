@@ -1,9 +1,10 @@
-alias openai-codex='docker run --rm -it \
-  -v "$(pwd)":"$(pwd)":rw \
-  -w "$(pwd)" \
-  -e OPENAI_API_KEY="$(cat ~/.openai)" \
-  --user 1001:1001 \
-  -e USER="$USER" \
-  -e HOME="/home/user" \
-  -v "$HOME":"/home/user" \
-  openai-codex codex "$@"'
+# openai-codex
+source "$(dirname "${BASH_SOURCE[0]}")/docker-cli-run.sh"
+
+function openai-codex() {
+  docker_cli_run \
+    --image openai-codex \
+    --cmd codex \
+    --env "OPENAI_API_KEY=$(cat ~/.openai)" \
+    -- "$@"
+}
