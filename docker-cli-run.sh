@@ -5,8 +5,43 @@
 #   source docker-cli-run.sh
 #   docker_cli_run --image <name> --cmd <executable> [--cmd-arg <arg>]... [--env K=V]... [--mount host:container:mode]... -- [user-args...]
 #
-# Provides: --add-dir argument parsing, git root/worktree detection,
-# standard volume mounts, user mapping, HOME/USER env vars.
+# Provides: --add-dir/--add-dirs argument parsing, explicit volume mounts,
+# user mapping, HOME/USER env vars, and caller-pwd working-directory setup.
+
+docker_cli_trim_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "$value"
+}
+
+docker_cli_normalize_mount_dir() {
+  local raw_dir="$1"
+  local base_dir="$2"
+  local mount_dir
+
+  mount_dir=$(docker_cli_trim_whitespace "$raw_dir")
+  if [[ -z "$mount_dir" ]]; then
+    echo "Error: mount directory entries must be non-empty" >&2
+    return 1
+  fi
+
+  if [[ "$mount_dir" != /* ]]; then
+    mount_dir="${base_dir}/${mount_dir}"
+  fi
+
+  if mount_dir=$(realpath -m "$mount_dir" 2>/dev/null); then
+    printf '%s\n' "$mount_dir"
+    return 0
+  fi
+
+  if mount_dir=$(realpath "$mount_dir" 2>/dev/null); then
+    printf '%s\n' "$mount_dir"
+    return 0
+  fi
+
+  printf '%s\n' "$mount_dir"
+}
 
 docker_cli_run() {
   local image=""
@@ -44,49 +79,56 @@ docker_cli_run() {
     return 1
   fi
 
-  # Parse user args: extract --add-dir, pass through everything else
-  local -a extra_mounts=()
-  local -a pass_args=()
-
-  for ((i=0; i<${#user_args[@]}; i++)); do
-    if [[ "${user_args[$i]}" == "--add-dir" ]]; then
-      if [[ -n "${user_args[$((i+1))]}" ]]; then
-        extra_mounts+=("${user_args[$((i+1))]}")
-        ((i++))
-      else
-        echo "Error: --add-dir requires a path argument" >&2
-        return 1
-      fi
-    else
-      pass_args+=("${user_args[$i]}")
-    fi
-  done
-
-  # Find git root or fall back to cwd
-  local git_root
-  git_root=$(git rev-parse --show-toplevel 2>/dev/null)
-  local mount_path="${git_root:-$(pwd)}"
   local work_dir
   work_dir="$(pwd)"
 
-  # If in a worktree, also mount the main repo root.
-  # Both paths must be resolved to absolute form before comparing because
-  # git returns relative vs absolute paths depending on the working directory.
-  local git_dir git_common_dir
-  git_dir=$(realpath "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null)
-  git_common_dir=$(realpath "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null)
-  if [[ -n "$git_dir" && -n "$git_common_dir" && "$git_dir" != "$git_common_dir" ]]; then
-    local main_repo_root
-    main_repo_root=$(realpath "${git_common_dir}/.." 2>/dev/null)
-    if [[ -n "$main_repo_root" && -d "$main_repo_root" ]]; then
-      extra_mounts+=("${main_repo_root}")
-    fi
-  fi
+  # Parse user args: extract wrapper-only mount flags, pass through everything else
+  local -a extra_mounts=()
+  local -a pass_args=()
+  local i
+  local raw_dir
+  local normalized_dir
+  local raw_dirs
+  local -a raw_dir_entries=()
+  local entry
+
+  for ((i=0; i<${#user_args[@]}; i++)); do
+    case "${user_args[$i]}" in
+      --add-dir)
+        if (( i + 1 >= ${#user_args[@]} )) || [[ -z "${user_args[$((i+1))]}" ]]; then
+          echo "Error: --add-dir requires a path argument" >&2
+          return 1
+        fi
+        raw_dir="${user_args[$((i+1))]}"
+        normalized_dir=$(docker_cli_normalize_mount_dir "$raw_dir" "$work_dir") || return 1
+        extra_mounts+=("$normalized_dir")
+        ((i++))
+        ;;
+      --add-dirs)
+        if (( i + 1 >= ${#user_args[@]} )) || [[ -z "${user_args[$((i+1))]}" ]]; then
+          echo "Error: --add-dirs requires a comma-separated path list" >&2
+          return 1
+        fi
+        raw_dirs="${user_args[$((i+1))]}"
+        if [[ "$raw_dirs" =~ ^[[:space:]]*, ]] || [[ "$raw_dirs" =~ ,[[:space:]]*$ ]] || [[ "$raw_dirs" =~ ,[[:space:]]*, ]]; then
+          echo "Error: --add-dirs entries must be non-empty" >&2
+          return 1
+        fi
+        IFS=',' read -r -a raw_dir_entries <<< "$raw_dirs"
+        for entry in "${raw_dir_entries[@]}"; do
+          normalized_dir=$(docker_cli_normalize_mount_dir "$entry" "$work_dir") || return 1
+          extra_mounts+=("$normalized_dir")
+        done
+        ((i++))
+        ;;
+      *)
+        pass_args+=("${user_args[$i]}")
+        ;;
+    esac
+  done
 
   # Standard volume mounts
-  local -a volume_args=(
-    -v "${mount_path}":"${mount_path}":rw
-  )
+  local -a volume_args=()
   if [[ -f "${HOME}/.gitconfig" ]]; then
     volume_args+=(-v "${HOME}/.gitconfig:${HOME}/.gitconfig:ro")
   fi
@@ -110,7 +152,7 @@ docker_cli_run() {
     volume_args+=(-v "$mnt")
   done
 
-  # Extra user-requested mounts (--add-dir)
+  # Extra user-requested mounts (--add-dir/--add-dirs)
   for dir in "${extra_mounts[@]}"; do
     volume_args+=(-v "$dir":"$dir":rw)
   done
