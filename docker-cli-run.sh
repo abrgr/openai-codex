@@ -93,6 +93,9 @@ docker_cli_run() {
   if [[ -d "${HOME}/.ssh" ]]; then
     volume_args+=(-v "${HOME}/.ssh:${HOME}/.ssh:ro")
   fi
+  if [[ -d "${HOME}/.codex" ]]; then
+    volume_args+=(-v "${HOME}/.codex:${HOME}/.codex:rw")
+  fi
   if [[ -S "/var/run/docker.sock" ]]; then
     volume_args+=(-v "/var/run/docker.sock:/var/run/docker.sock")
   fi
