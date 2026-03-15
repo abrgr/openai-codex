@@ -6,5 +6,5 @@ function openai-codex() {
     --image openai-codex \
     --cmd codex \
     --env "OPENAI_API_KEY=$(cat ~/.openai)" \
-    -- "$@"
+    -- --dangerously-bypass-approvals-and-sandbox "$@"
 }
