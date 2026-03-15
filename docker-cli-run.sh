@@ -127,6 +127,7 @@ docker_cli_run() {
   fi
 
   docker run --rm -it \
+    --tmpfs "${HOME}:exec,uid=${UID},gid=$(id -g)" \
     "${volume_args[@]}" \
     -w "${work_dir}" \
     "${env_args[@]}" \
