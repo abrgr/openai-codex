@@ -69,10 +69,12 @@ docker_cli_run() {
   local work_dir
   work_dir="$(pwd)"
 
-  # If in a worktree, also mount the main repo root
+  # If in a worktree, also mount the main repo root.
+  # Both paths must be resolved to absolute form before comparing because
+  # git returns relative vs absolute paths depending on the working directory.
   local git_dir git_common_dir
-  git_dir=$(git rev-parse --git-dir 2>/dev/null)
-  git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+  git_dir=$(realpath "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null)
+  git_common_dir=$(realpath "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null)
   if [[ -n "$git_dir" && -n "$git_common_dir" && "$git_dir" != "$git_common_dir" ]]; then
     local main_repo_root
     main_repo_root=$(realpath "${git_common_dir}/.." 2>/dev/null)
