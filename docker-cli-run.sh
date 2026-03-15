@@ -70,12 +70,15 @@ docker_cli_run() {
   work_dir="$(pwd)"
 
   # If in a worktree, also mount the main repo root
-  local git_common_dir
+  local git_dir git_common_dir
+  git_dir=$(git rev-parse --git-dir 2>/dev/null)
   git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
-  if [[ -n "$git_common_dir" && "$git_common_dir" != ".git" && "$git_common_dir" != "${mount_path}/.git" ]]; then
+  if [[ -n "$git_dir" && -n "$git_common_dir" && "$git_dir" != "$git_common_dir" ]]; then
     local main_repo_root
-    main_repo_root=$(cd "${mount_path}" && realpath "${git_common_dir}/..")
-    extra_mounts+=("${main_repo_root}")
+    main_repo_root=$(realpath "${git_common_dir}/.." 2>/dev/null)
+    if [[ -n "$main_repo_root" && -d "$main_repo_root" ]]; then
+      extra_mounts+=("${main_repo_root}")
+    fi
   fi
 
   # Standard volume mounts
