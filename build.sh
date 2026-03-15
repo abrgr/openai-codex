@@ -6,4 +6,5 @@ CODEX_VERSION=$(curl -sf https://registry.npmjs.org/@openai/codex/latest | sed -
 docker build \
   --build-arg CODEX_VERSION="$CODEX_VERSION" \
   -t "openai-codex:${CODEX_VERSION}" \
+  -t "openai-codex:latest" \
   .
