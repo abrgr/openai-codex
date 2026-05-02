@@ -85,6 +85,41 @@ assert_stderr_contains() {
   fi
 }
 
+test_cargo_home_created_mounted_and_exported() {
+  setup_case
+
+  local workspace="${CASE_DIR}/workspace"
+  mkdir -p "${workspace}"
+
+  run_docker_cli_run "${workspace}" \
+    --image test-image \
+    --cmd codex \
+    -- prompt
+
+  assert_status 0
+  [[ -d "${TEST_HOME}/.cargo" ]] || fail "expected Cargo home to be created"
+  assert_args_contains "${TEST_HOME}/.cargo:${TEST_HOME}/.cargo:rw"
+  assert_args_contains "CARGO_HOME=${TEST_HOME}/.cargo"
+}
+
+test_tool_env_can_override_cargo_home() {
+  setup_case
+
+  local workspace="${CASE_DIR}/workspace"
+  mkdir -p "${workspace}"
+
+  run_docker_cli_run "${workspace}" \
+    --image test-image \
+    --cmd codex \
+    --env "CARGO_HOME=/custom/cargo" \
+    -- prompt
+
+  assert_status 0
+  assert_args_contains "${TEST_HOME}/.cargo:${TEST_HOME}/.cargo:rw"
+  assert_args_contains "CARGO_HOME=${TEST_HOME}/.cargo"
+  assert_args_contains "CARGO_HOME=/custom/cargo"
+}
+
 test_add_dirs_csv_mounts_and_strips_flag() {
   setup_case
 
@@ -178,6 +213,8 @@ run_test() {
   echo "ok - ${test_name}"
 }
 
+run_test test_cargo_home_created_mounted_and_exported
+run_test test_tool_env_can_override_cargo_home
 run_test test_add_dirs_csv_mounts_and_strips_flag
 run_test test_legacy_add_dir_still_works
 run_test test_missing_add_dirs_value_fails

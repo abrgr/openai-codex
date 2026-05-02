@@ -6,7 +6,7 @@
 #   docker_cli_run --image <name> --cmd <executable> [--cmd-arg <arg>]... [--env K=V]... [--mount host:container:mode]... -- [user-args...]
 #
 # Provides: --add-dir/--add-dirs argument parsing, explicit volume mounts,
-# user mapping, HOME/USER env vars, and caller-pwd working-directory setup.
+# user mapping, HOME/USER/CARGO_HOME env vars, and caller-pwd working-directory setup.
 
 docker_cli_trim_whitespace() {
   local value="$1"
@@ -41,6 +41,16 @@ docker_cli_normalize_mount_dir() {
   fi
 
   printf '%s\n' "$mount_dir"
+}
+
+docker_cli_ensure_dir() {
+  local dir="$1"
+  local label="$2"
+
+  if ! mkdir -p "$dir"; then
+    echo "Error: failed to create ${label}: ${dir}" >&2
+    return 1
+  fi
 }
 
 docker_cli_run() {
@@ -127,8 +137,12 @@ docker_cli_run() {
     esac
   done
 
+  local cargo_home="${HOME}/.cargo"
+  docker_cli_ensure_dir "$cargo_home" "Cargo home" || return 1
+
   # Standard volume mounts
   local -a volume_args=()
+  volume_args+=(-v "${cargo_home}:${cargo_home}:rw")
   if [[ -f "${HOME}/.gitconfig" ]]; then
     volume_args+=(-v "${HOME}/.gitconfig:${HOME}/.gitconfig:ro")
   fi
@@ -157,8 +171,8 @@ docker_cli_run() {
     volume_args+=(-v "$dir":"$dir":rw)
   done
 
-  # Tool-specific env vars
-  local -a env_args=(-e "USER=${USER}" -e "HOME=${HOME}")
+  # Default env vars; tool-specific env vars may intentionally override them.
+  local -a env_args=(-e "USER=${USER}" -e "HOME=${HOME}" -e "CARGO_HOME=${cargo_home}")
   for env in "${tool_envs[@]}"; do
     env_args+=(-e "$env")
   done
